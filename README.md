@@ -9,18 +9,30 @@ This project demonstrates using the DRV2605L haptic driver module with the M5Sta
 - **LED Patterns**: Different blink patterns based on which button is pressed
 - **Haptic Feedback**: DRV2605L generates haptic patterns when BTN4 is pressed
 
-## Pin Configuration
+## Pin Configuration (Corrected)
 
+### DRV2605L Connections
+| DRV2605L Pin | M5Stack StampS3 Pin | Description |
+|--------------|---------------------|-------------|
+| VCC | 5V | Power supply |
+| GND | GND | Ground |
+| SDA | G44 | I2C data line |
+| SCL | G42 | I2C clock line |
+| IN | G40 | Input trigger pin |
+| EN | G41 | Enable pin |
+
+### LED Connections
 | Component | Pin | Description |
 |-----------|-----|-------------|
 | LED | G39 | Status LED |
+
+### Button Connections
+| Component | Pin | Description |
+|-----------|-----|-------------|
 | BTN1 | G10 | 1-second blink pattern |
 | BTN2 | G9 | 2-second blink pattern |
 | BTN3 | G8 | 3-second blink pattern |
 | BTN4 | G7 | Haptic pattern trigger |
-| DRV2605L EN | G41 | Enable pin for DRV2605L |
-| DRV2605L SDA | G13 | I2C data line |
-| DRV2605L SCL | G15 | I2C clock line |
 
 ## Operation
 
@@ -32,15 +44,19 @@ This project demonstrates using the DRV2605L haptic driver module with the M5Sta
 
 ## Hardware Setup
 
-### DRV2605L Connections
-- VCC → 3.3V
-- GND → GND
-- SDA → G13
-- SCL → G15
-- EN → G41
+### DRV2605L Module
+- Connect VCC to 5V (as specified in connection diagram)
+- Connect GND to GND
+- Connect SDA to G44
+- Connect SCL to G42
+- Connect IN to G40
+- Connect EN to G41
 
 ### Button Connections
-Connect buttons between the respective GPIO pins and GND with pull-up resistors (internal pull-ups are enabled in code).
+Connect buttons between the respective GPIO pins and GND. Internal pull-up resistors are enabled in the code.
+
+### LED Connection
+Connect LED with appropriate current limiting resistor between G39 and GND.
 
 ## Dependencies
 
@@ -50,7 +66,7 @@ Connect buttons between the respective GPIO pins and GND with pull-up resistors 
 ## Usage
 
 1. Upload the code to your M5Stack StampS3
-2. Connect the DRV2605L module and buttons as specified
+2. Connect the DRV2605L module and buttons as specified in the pin configuration
 3. Power on the device - it will blink once and go to sleep
 4. Press any button to wake and trigger the corresponding action
 
@@ -60,6 +76,15 @@ Connect buttons between the respective GPIO pins and GND with pull-up resistors 
 - Haptic patterns 50-123 are from the DRV2605L's built-in effect library
 - All buttons use internal pull-up resistors
 - The DRV2605L is only powered when needed (BTN4 press) to save power
+- Uses ESP32's ext1 wakeup to support multiple button wake-up sources
+- DRV2605L is powered from 5V as specified in the connection diagram
+
+## Troubleshooting
+
+- If haptic effects don't work, check I2C connections on G44 (SDA) and G42 (SCL)
+- Ensure DRV2605L is receiving 5V power supply
+- Check serial monitor for I2C communication errors
+- Verify button connections and ensure they're properly grounded when pressed
 
 ## License
 

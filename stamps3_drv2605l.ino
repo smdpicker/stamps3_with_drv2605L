@@ -7,30 +7,34 @@
  * - LED blink patterns based on button pressed
  * - Haptic feedback using DRV2605L
  * 
- * Pin Configuration:
+ * Pin Configuration (Corrected):
  * - LED: G39
  * - BTN1: G10 (1 second blink)
  * - BTN2: G9  (2 second blink)
  * - BTN3: G8  (3 second blink)
  * - BTN4: G7  (haptic pattern + deep sleep)
+ * - DRV2605L VCC: 5V
+ * - DRV2605L GND: GND
+ * - DRV2605L SDA: G44
+ * - DRV2605L SCL: G42
+ * - DRV2605L IN: G40
  * - DRV2605L EN: G41
- * - DRV2605L SDA: G13
- * - DRV2605L SCL: G15
  */
 
 #include <Wire.h>
 #include "esp_sleep.h"
 #include "driver/rtc_io.h"
 
-// Pin definitions
+// Pin definitions (CORRECTED)
 #define LED_PIN 39
 #define BTN1_PIN 10  // 1 second blink
 #define BTN2_PIN 9   // 2 second blink
 #define BTN3_PIN 8   // 3 second blink
 #define BTN4_PIN 7   // haptic pattern
 #define DRV_EN_PIN 41
-#define SDA_PIN 13
-#define SCL_PIN 15
+#define DRV_IN_PIN 40
+#define SDA_PIN 44   // Corrected from G13 to G44
+#define SCL_PIN 42   // Corrected from G15 to G42
 
 // DRV2605L I2C address
 #define DRV2605L_ADDR 0x5A
@@ -81,9 +85,11 @@ void setup() {
   pinMode(BTN3_PIN, INPUT_PULLUP);
   pinMode(BTN4_PIN, INPUT_PULLUP);
   pinMode(DRV_EN_PIN, OUTPUT);
+  pinMode(DRV_IN_PIN, OUTPUT);
   
   // Disable DRV2605L initially
   digitalWrite(DRV_EN_PIN, LOW);
+  digitalWrite(DRV_IN_PIN, LOW);
   
   // Check wake-up reason
   esp_sleep_wakeup_cause_t wakeup_cause = esp_sleep_get_wakeup_cause();
@@ -154,7 +160,7 @@ void runHapticPattern() {
   digitalWrite(DRV_EN_PIN, HIGH);
   delay(100); // Allow time for power-up
   
-  // Initialize I2C
+  // Initialize I2C with corrected pins
   Wire.begin(SDA_PIN, SCL_PIN);
   
   // Initialize DRV2605L
@@ -163,6 +169,8 @@ void runHapticPattern() {
     
     // Run haptic patterns 50-123
     for (int pattern = 50; pattern <= 123; pattern++) {
+      Serial.print("Playing haptic effect: ");
+      Serial.println(pattern);
       playHapticEffect(pattern);
       delay(500); // Delay between patterns
     }
@@ -174,17 +182,20 @@ void runHapticPattern() {
   
   // Disable DRV2605L
   digitalWrite(DRV_EN_PIN, LOW);
+  digitalWrite(DRV_IN_PIN, LOW);
 }
 
 bool initDRV2605L() {
   // Check if device is present
   Wire.beginTransmission(DRV2605L_ADDR);
   if (Wire.endTransmission() != 0) {
+    Serial.println("DRV2605L not found on I2C bus");
     return false;
   }
   
   // Set to standby mode
   writeRegister(DRV2605L_REG_MODE, 0x40);
+  delay(10);
   
   // Set library to ERM (Eccentric Rotating Mass)
   writeRegister(DRV2605L_REG_LIBRARY, 1);
@@ -192,13 +203,13 @@ bool initDRV2605L() {
   // Set to internal trigger mode
   writeRegister(DRV2605L_REG_MODE, 0x00);
   
-  // Set rated voltage (adjust based on your actuator)
+  // Set rated voltage (adjust based on your actuator - typical ERM value)
   writeRegister(DRV2605L_REG_RATEDV, 0x3E);
   
   // Set overdrive clamp voltage
   writeRegister(DRV2605L_REG_CLAMPV, 0x8C);
   
-  // Set feedback control
+  // Set feedback control for ERM
   writeRegister(DRV2605L_REG_FEEDBACK, 0xB6);
   
   // Set control registers
@@ -206,6 +217,7 @@ bool initDRV2605L() {
   writeRegister(DRV2605L_REG_CONTROL2, 0xF5);
   writeRegister(DRV2605L_REG_CONTROL3, 0x80);
   
+  Serial.println("DRV2605L registers configured");
   return true;
 }
 
@@ -222,9 +234,13 @@ void playHapticEffect(uint8_t effect) {
   writeRegister(DRV2605L_REG_GO, 1);
   
   // Wait for effect to complete
-  delay(100);
-  while (readRegister(DRV2605L_REG_GO) == 1) {
+  delay(50);
+  uint8_t go_bit = 1;
+  int timeout = 0;
+  while (go_bit == 1 && timeout < 100) {
+    go_bit = readRegister(DRV2605L_REG_GO);
     delay(10);
+    timeout++;
   }
 }
 
@@ -232,13 +248,22 @@ void writeRegister(uint8_t reg, uint8_t value) {
   Wire.beginTransmission(DRV2605L_ADDR);
   Wire.write(reg);
   Wire.write(value);
-  Wire.endTransmission();
+  uint8_t result = Wire.endTransmission();
+  if (result != 0) {
+    Serial.print("I2C write error: ");
+    Serial.println(result);
+  }
 }
 
 uint8_t readRegister(uint8_t reg) {
   Wire.beginTransmission(DRV2605L_ADDR);
   Wire.write(reg);
-  Wire.endTransmission();
+  uint8_t result = Wire.endTransmission();
+  if (result != 0) {
+    Serial.print("I2C read error: ");
+    Serial.println(result);
+    return 0;
+  }
   
   Wire.requestFrom(DRV2605L_ADDR, 1);
   if (Wire.available()) {
@@ -251,11 +276,14 @@ void goToDeepSleep() {
   Serial.println("Going to deep sleep...");
   Serial.flush();
   
-  // Configure wake-up sources
-  esp_sleep_enable_ext0_wakeup((gpio_num_t)BTN1_PIN, LOW);
-  esp_sleep_enable_ext0_wakeup((gpio_num_t)BTN2_PIN, LOW);
-  esp_sleep_enable_ext0_wakeup((gpio_num_t)BTN3_PIN, LOW);
-  esp_sleep_enable_ext0_wakeup((gpio_num_t)BTN4_PIN, LOW);
+  // Configure wake-up sources (ESP32 ext0 can only use one pin, so we'll use ext1 for multiple pins)
+  uint64_t ext_wakeup_pin_mask = 0;
+  ext_wakeup_pin_mask |= (1ULL << BTN1_PIN);
+  ext_wakeup_pin_mask |= (1ULL << BTN2_PIN);
+  ext_wakeup_pin_mask |= (1ULL << BTN3_PIN);
+  ext_wakeup_pin_mask |= (1ULL << BTN4_PIN);
+  
+  esp_sleep_enable_ext1_wakeup(ext_wakeup_pin_mask, ESP_EXT1_WAKEUP_ANY_LOW);
   
   // Configure pins to maintain state during deep sleep
   rtc_gpio_pullup_en((gpio_num_t)BTN1_PIN);
@@ -268,6 +296,7 @@ void goToDeepSleep() {
   
   // Ensure DRV2605L is disabled
   digitalWrite(DRV_EN_PIN, LOW);
+  digitalWrite(DRV_IN_PIN, LOW);
   
   // Enter deep sleep
   esp_deep_sleep_start();
